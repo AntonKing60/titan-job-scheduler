@@ -1,0 +1,16 @@
+{
+  "name": "Titan Job Scheduler",
+  "short_name": "Titan Jobs",
+  "description": "Professional Job Scheduler for Titan Windows.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1E40AF",
+  "theme_color": "#1E40AF",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

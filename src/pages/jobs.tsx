@@ -7,7 +7,8 @@ import { Search, Loader2, Calendar, Plus, ChevronLeft, ChevronRight, CalendarDay
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import { format, addDays, subDays, isSameDay } from 'date-fns'
+import { format, addDays, subDays } from 'date-fns'
+import { normalizeDateToString, getTodayString } from '@/lib/date-utils'
 import {
   Popover,
   PopoverContent,
@@ -57,15 +58,17 @@ export function JobsPage() {
         }
       })
       
-      // Sorting by Next Due (soonest first)
+      // Sorting by Next Due (soonest first) - Safari-safe string comparison
       const sortedJobs = (results as Job[]).sort((a, b) => {
-        const dateA = a.nextDue ? new Date(a.nextDue).getTime() : Infinity
-        const dateB = b.nextDue ? new Date(b.nextDue).getTime() : Infinity
+        const dateA = normalizeDateToString(a.nextDue)
+        const dateB = normalizeDateToString(b.nextDue)
         
-        if (isNaN(dateA)) return 1
-        if (isNaN(dateB)) return -1
+        // Jobs without valid dates go to the end
+        if (!dateA) return 1
+        if (!dateB) return -1
         
-        return dateA - dateB
+        // YYYY-MM-DD strings can be compared lexicographically
+        return dateA.localeCompare(dateB)
       })
 
       setJobs(sortedJobs)
@@ -138,13 +141,13 @@ export function JobsPage() {
       
       toast.success('Job added successfully')
       setJobs(prev => [...prev, newJob].sort((a, b) => {
-        const dateA = a.nextDue ? new Date(a.nextDue).getTime() : Infinity
-        const dateB = b.nextDue ? new Date(b.nextDue).getTime() : Infinity
+        const dateA = normalizeDateToString(a.nextDue)
+        const dateB = normalizeDateToString(b.nextDue)
         
-        if (isNaN(dateA)) return 1
-        if (isNaN(dateB)) return -1
+        if (!dateA) return 1
+        if (!dateB) return -1
         
-        return dateA - dateB
+        return dateA.localeCompare(dateB)
       }))
       
       // Reset form
@@ -162,34 +165,11 @@ export function JobsPage() {
     }
   }
 
-  // Helper to safely parse date strings in various formats (UK DD/MM/YYYY or ISO YYYY-MM-DD)
-  const parseJobDate = (dateStr: string | undefined): Date | null => {
-    if (!dateStr) return null
-    
-    // Handle YYYY-MM-DD format (treat as local date, not UTC)
-    if (/^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
-      const [year, month, day] = dateStr.substring(0, 10).split('-').map(Number)
-      return new Date(year, month - 1, day)
-    }
-    
-    // Handle DD/MM/YYYY UK format
-    if (/^\d{2}\/\d{2}\/\d{4}/.test(dateStr)) {
-      const [day, month, year] = dateStr.substring(0, 10).split('/').map(Number)
-      return new Date(year, month - 1, day)
-    }
-    
-    // Fallback for other formats
-    const parsed = new Date(dateStr)
-    return isNaN(parsed.getTime()) ? null : parsed
-  }
-  
-  // Helper to normalize date string to YYYY-MM-DD format for comparison
-  const normalizeDateString = (dateStr: string | undefined): string | null => {
-    const parsed = parseJobDate(dateStr)
-    if (!parsed) return null
-    const year = parsed.getFullYear()
-    const month = String(parsed.getMonth() + 1).padStart(2, '0')
-    const day = String(parsed.getDate()).padStart(2, '0')
+  // Helper to format a Date object to YYYY-MM-DD string (Safari-safe)
+  const dateToString = (date: Date): string => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
     return `${year}-${month}-${day}`
   }
 
@@ -210,20 +190,20 @@ export function JobsPage() {
       return jobs // Already sorted by next_due in fetchJobs
     }
 
-    // Date Toggle: Filter by selected date using timezone-safe comparison
-    const selectedDateStr = format(selectedDate, 'yyyy-MM-dd')
-    const todayStr = format(new Date(), 'yyyy-MM-dd')
+    // Safari-safe: Convert dates to YYYY-MM-DD strings for comparison
+    const selectedDateStr = dateToString(selectedDate)
+    const todayStr = getTodayString()
     const isToday = selectedDateStr === todayStr
 
     return jobs.filter(job => {
       if (!job.nextDue) return false
       
-      // Normalize job date to YYYY-MM-DD format for comparison
-      const jobDateStr = normalizeDateString(job.nextDue)
+      // Normalize job date to YYYY-MM-DD format using shared utility
+      const jobDateStr = normalizeDateToString(job.nextDue)
       if (!jobDateStr) return false
       
       if (isToday) {
-        // For today, show today's jobs AND overdue jobs
+        // For today, show today's jobs AND overdue jobs (string comparison works for YYYY-MM-DD)
         return jobDateStr === selectedDateStr || jobDateStr < selectedDateStr
       }
       
@@ -236,6 +216,11 @@ export function JobsPage() {
   const prevDay = () => setSelectedDate(prev => prev ? subDays(prev, 1) : subDays(new Date(), 1))
   const goToToday = () => setSelectedDate(new Date())
   const showAllJobs = () => setSelectedDate(null)
+  
+  // Safari-safe isSameDay check using string comparison
+  const isSameDay = (date1: Date, date2: Date): boolean => {
+    return dateToString(date1) === dateToString(date2)
+  }
 
   return (
     <div className="flex flex-col h-screen">
